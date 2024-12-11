@@ -5,7 +5,7 @@ import argparse
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('music_dir', type=str, help='Directory which contains the flac files')
-    parser.add_argument('--parent-dir-name', action='store_true', help='Use the parent dir name for the output dir, if not set, \"output_opus\" will be used')
+    parser.add_argument('--parent_dir_name', action='store_true', help='Use the parent dir name for the output dir, if not set, \"output_opus\" will be used')
 
     args = parser.parse_args()
 
