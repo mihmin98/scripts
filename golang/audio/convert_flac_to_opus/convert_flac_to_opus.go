@@ -12,7 +12,7 @@ import (
 func main() {
 	// Parse command-line arguments
 	musicDir := flag.String("music_dir", "", "Directory which contains the flac files")
-	useParentDirName := flag.Bool("parent-dir-name", false, "Use the parent dir name for the output dir, if not set, 'output_opus' will be used")
+	useParentDirName := flag.Bool("parent_dir_name", false, "Use the parent dir name for the output dir, if not set, 'output_opus' will be used")
 	flag.Parse()
 
 	if *musicDir == "" {
@@ -21,7 +21,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srcDir := filepath.Clean(*musicDir)
+	srcDir, err := filepath.Abs(*musicDir)
 	destDir := ""
 
 	// Determine the destination directory
@@ -32,7 +32,7 @@ func main() {
 	}
 
 	// Create the destination directory if it doesn't exist
-	err := os.MkdirAll(destDir, os.ModePerm)
+	err = os.MkdirAll(destDir, os.ModePerm)
 	if err != nil {
 		fmt.Printf("Error creating destination directory: %v\n", err)
 		os.Exit(1)
@@ -53,6 +53,8 @@ func main() {
 	// Process each FLAC file
 	for _, flacFile := range flacFiles {
 		outputPath := filepath.Join(destDir, strings.Replace(filepath.Base(flacFile), ".flac", ".opus", 1))
+		fmt.Println(outputPath)
+
 		cmd := []string{"ffmpeg", "-i", flacFile, "-c:v", "libtheora", "-q:v", "10", "-c:a", "libopus", "-b:a", "160k", outputPath}
 
 		fmt.Println(strings.Join(cmd, " "))
