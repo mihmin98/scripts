@@ -9,7 +9,7 @@ def main():
 
     args = parser.parse_args()
 
-    src_dir = Path(args.music_dir)
+    src_dir = Path(args.music_dir).absolute()
     if args.parent_dir_name:
         dest_dir = src_dir / src_dir.parts[-1]
     else:
