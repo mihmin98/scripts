@@ -1,9 +1,12 @@
-GO 				:= go
-PKG 			:= ./...
+GO 	:= go
+PKG	:= ./...
+
 OUTDIR 			:= build
 OUTDIR_LINUX 	:= $(OUTDIR)/linux
 OUTDIR_WINDOWS 	:= $(OUTDIR)/windows
 LDFLAGS 		:= -s -w
+
+LINUX_INSTALL_DIR := $(HOME)/.local/bin
 
 .PHONY: all build clean
 
@@ -22,6 +25,9 @@ build-windows:create-build-dir
 	GOOS=windows GOARCH=amd64 $(GO) build -o $(OUTDIR_WINDOWS) -ldflags="$(LDFLAGS)" $(PKG)
 
 build: build-linux build-windows
+
+install-linux: build-linux
+	@cp -v $(OUTDIR_LINUX)/* $(LINUX_INSTALL_DIR)
 
 clean:
 	@rm -rv $(OUTDIR)
