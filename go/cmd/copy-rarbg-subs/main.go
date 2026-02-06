@@ -3,13 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/mihmin98/scripts/pkg/fileutils"
 )
 
 type programArgs struct {
@@ -35,23 +35,6 @@ const (
 	subsDirName       = "Subs"
 )
 
-func getFilesWithExtension(dirPath string, extension string) []string {
-	var files []string
-	filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if filepath.Ext(d.Name()) == extension {
-			files = append(files, path)
-		}
-
-		return nil
-	})
-
-	return files
-}
-
 func copySub(dirPath string, videoPath string) {
 	videoName := getFileName(videoPath)
 	subsDirPath := filepath.Join(dirPath, subsDirName)
@@ -63,7 +46,7 @@ func copySub(dirPath string, videoPath string) {
 		subsDirPath = filepath.Join(subsDirPath, videoName)
 	}
 
-	availableSubs := getFilesWithExtension(subsDirPath, subtitleExtension)
+	availableSubs := fileutils.GetFilesWithExtension(subsDirPath, subtitleExtension)
 	for lang := range langToCode {
 		// There shouldn't be more than 3 srt files per language
 		subsForCurrentLang := make([]string, 0, 3)
@@ -83,7 +66,7 @@ func copySub(dirPath string, videoPath string) {
 			if args.verbose {
 				fmt.Printf("%v -> %v\n", selectedSub, subDestPath)
 			}
-			copyFile(selectedSub, subDestPath)
+			fileutils.CopyFile(selectedSub, subDestPath)
 		}
 	}
 }
@@ -108,23 +91,6 @@ func getFileName(file string) string {
 	return strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
 }
 
-func copyFile(src, dest string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	_, err = io.Copy(out, in)
-	return err
-}
-
 func main() {
 	args = programArgs{}
 
@@ -143,7 +109,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	videoFiles := getFilesWithExtension(args.videoDir, videoExtension)
+	videoFiles := fileutils.GetFilesWithExtension(args.videoDir, videoExtension)
 	if args.verbose {
 		fmt.Printf("Found %v videos at %v\n", len(videoFiles), args.videoDir)
 	}
