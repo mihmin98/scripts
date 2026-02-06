@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func GetFilesWithExtension(dirPath, extension string) []string {
@@ -39,4 +40,10 @@ func CopyFile(src, dest string) error {
 
 	_, err = io.Copy(out, in)
 	return err
+}
+
+func ReplaceExtension(filename, newExtension string) string {
+	origExtension := filepath.Ext(filename)
+	newFilename := strings.TrimSuffix(filename, origExtension) + newExtension
+	return newFilename
 }
