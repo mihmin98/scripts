@@ -1,24 +1,22 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/akamensky/argparse"
 	"github.com/mihmin98/scripts/pkg/fileutils"
 )
 
 type programArgs struct {
-	musicDir         string
-	useParentDirName bool
-	bitrate          int
-	verbose          bool
+	musicDir         *string
+	useParentDirName *bool
+	bitrate          *int
+	verbose          *bool
 }
-
-var args programArgs
 
 const (
 	flacExtension        = ".flac"
@@ -58,40 +56,40 @@ func convertFlac(flacPath, outputDir string, bitrate int) error {
 }
 
 func main() {
-	args = programArgs{}
+	args := programArgs{}
 
-	flag.StringVar(&args.musicDir, "music-dir", "", "Directory which contains the .flac files")
-	flag.BoolVar(&args.useParentDirName, "parent-dir-name", false, "Use the parent dir name for the output dir, if not set, \"output_opus\" will be used. This is mandatory.")
-	flag.IntVar(&args.bitrate, "bitrate", 160, "Bitrate in kbps for the output files. By default it is set to 160k")
-	flag.BoolVar(&args.verbose, "v", false, "Enable verbose output")
+	parser := argparse.NewParser("", "Script for converting flac files to opus files")
 
-	flag.Parse()
+	args.musicDir = parser.String("d", "music-dir", &argparse.Options{Required: true, Help: "Path to directory which contains the .flac files"})
+	args.useParentDirName = parser.Flag("p", "parent-dir-name", &argparse.Options{Help: "Use the parent dir name for the output dir, if not set, \"output_opus\" will be used."})
+	args.bitrate = parser.Int("b", "bitrate", &argparse.Options{Help: "Bitrate in kbps for the output files. By default it is set to 160k", Default: 160})
+	args.verbose = parser.Flag("v", "verbose", &argparse.Options{Help: "Enable verbose output"})
 
-	if args.musicDir == "" {
-		fmt.Println("Error: Music Dir is required")
-		flag.Usage()
+	err := parser.Parse(os.Args)
+	if err != nil {
+		fmt.Printf("Error: %v", parser.Usage(err))
 		os.Exit(1)
 	}
 
-	if _, err := os.Stat(args.musicDir); err != nil {
+	if _, err := os.Stat(*args.musicDir); err != nil {
 		log.Fatal(err)
 	}
 
-	musicFiles := fileutils.GetFilesWithExtension(args.musicDir, flacExtension)
-	if args.verbose {
+	musicFiles := fileutils.GetFilesWithExtension(*args.musicDir, flacExtension)
+	if *args.verbose {
 		fmt.Printf("Found %v flac files at %v\n", len(musicFiles), args.musicDir)
 	}
 
-	outputDir, err := createOutputDir(args.musicDir, args.useParentDirName)
+	outputDir, err := createOutputDir(*args.musicDir, *args.useParentDirName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	for _, musicFile := range musicFiles {
-		if args.verbose {
+		if *args.verbose {
 			fmt.Printf("Converting \"%v\"...\n", filepath.Base(musicFile))
 		}
-		err = convertFlac(musicFile, outputDir, args.bitrate)
+		err = convertFlac(musicFile, outputDir, *args.bitrate)
 		if err != nil {
 			fmt.Printf("Error converting \"%v\": %v\n", musicFile, err)
 		}

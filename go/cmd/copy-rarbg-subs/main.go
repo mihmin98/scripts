@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -9,25 +8,19 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/akamensky/argparse"
 	"github.com/mihmin98/scripts/pkg/fileutils"
 )
 
 type programArgs struct {
-	videoDir string
-	verbose  bool
+	videoDir *string
+	verbose  *bool
 }
-
-var args programArgs
 
 var langToCode = map[string]string{
 	"english":  "en",
 	"romanian": "ro",
 }
-
-// var codeToLang = map[string]string{
-// 	"en": "english",
-// 	"ro": "romanian",
-// }
 
 const (
 	videoExtension    = ".mp4"
@@ -35,7 +28,7 @@ const (
 	subsDirName       = "Subs"
 )
 
-func copySub(dirPath string, videoPath string) {
+func copySub(dirPath string, videoPath string, verbose bool) {
 	videoName := getFileName(videoPath)
 	subsDirPath := filepath.Join(dirPath, subsDirName)
 	if _, err := os.Stat(subsDirPath); err != nil {
@@ -63,7 +56,7 @@ func copySub(dirPath string, videoPath string) {
 			subDestFilename := fmt.Sprintf("%v.%v%v", videoName, langToCode[lang], subtitleExtension)
 			subDestPath := filepath.Join(dirPath, subDestFilename)
 
-			if args.verbose {
+			if verbose {
 				fmt.Printf("%v -> %v\n", selectedSub, subDestPath)
 			}
 			fileutils.CopyFile(selectedSub, subDestPath)
@@ -92,29 +85,29 @@ func getFileName(file string) string {
 }
 
 func main() {
-	args = programArgs{}
+	args := programArgs{}
 
-	flag.StringVar(&args.videoDir, "video-dir", "", "Directory which contains the video(s)")
-	flag.BoolVar(&args.verbose, "v", false, "Enable verbose output")
+	parser := argparse.NewParser("", "Script to copy subtitles from Subs dir from RARBG downloads")
 
-	flag.Parse()
+	args.videoDir = parser.String("d", "video-dir", &argparse.Options{Required: true, Help: "Directory which contains the video(s)"})
+	args.verbose = parser.Flag("v", "verbose", &argparse.Options{Help: "Enable verbose output"})
 
-	if args.videoDir == "" {
-		fmt.Println("Error: Video Dir is required")
-		flag.Usage()
+	err := parser.Parse(os.Args)
+	if err != nil {
+		fmt.Printf("Error: %v", parser.Usage(err))
 		os.Exit(1)
 	}
 
-	if _, err := os.Stat(args.videoDir); err != nil {
+	if _, err := os.Stat(*args.videoDir); err != nil {
 		log.Fatal(err)
 	}
 
-	videoFiles := fileutils.GetFilesWithExtension(args.videoDir, videoExtension)
-	if args.verbose {
+	videoFiles := fileutils.GetFilesWithExtension(*args.videoDir, videoExtension)
+	if *args.verbose {
 		fmt.Printf("Found %v videos at %v\n", len(videoFiles), args.videoDir)
 	}
 
 	for _, videoFile := range videoFiles {
-		copySub(args.videoDir, videoFile)
+		copySub(*args.videoDir, videoFile, *args.verbose)
 	}
 }
