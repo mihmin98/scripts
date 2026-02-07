@@ -48,10 +48,8 @@ func convertFlac(flacPath, outputDir string, bitrate int) error {
 
 	outputBitrate := fmt.Sprintf("%vk", bitrate)
 
-	cmd := "ffmpeg"
-	cmdArgs := []string{"-i", flacPath, "-c:v", "libtheora", "-q:v", "10", "-c:a", "libopus", "-b:a", outputBitrate, outputFile}
-
-	err := exec.Command(cmd, cmdArgs...).Run()
+	cmd := exec.Command("ffmpeg", "-i", flacPath, "-c:v", "libtheora", "-q:v", "10", "-c:a", "libopus", "-b:a", outputBitrate, outputFile)
+	err := cmd.Run()
 	return err
 }
 
