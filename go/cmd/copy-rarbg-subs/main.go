@@ -8,13 +8,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/akamensky/argparse"
+	"github.com/mihmin98/scripts/pkg/argparse"
 	"github.com/mihmin98/scripts/pkg/fileutils"
 )
 
 type programArgs struct {
-	videoDir *string
-	verbose  *bool
+	videoDir string
+	verbose  bool
 }
 
 var langToCode = map[string]string{
@@ -89,25 +89,23 @@ func main() {
 
 	parser := argparse.NewParser("", "Script to copy subtitles from Subs dir from RARBG downloads")
 
-	args.videoDir = parser.String("d", "video-dir", &argparse.Options{Required: true, Help: "Directory which contains the video(s)"})
-	args.verbose = parser.Flag("v", "verbose", &argparse.Options{Help: "Enable verbose output"})
+	parser.MustAddArgument([]string{"-d", "--video-dir"}, &argparse.Options{Required: true, Help: "Directory which contains the video(s)"})
+	parser.MustAddArgument([]string{"-v", "--verbose"}, &argparse.Options{Action: argparse.StoreTrue, Help: "Enable verbose output"})
 
-	err := parser.Parse(os.Args)
-	if err != nil {
-		fmt.Printf("Error: %v", parser.Usage(err))
-		os.Exit(1)
-	}
+	ns := parser.MustParseArgs(os.Args[1:])
+	args.videoDir = ns.String("video_dir")
+	args.verbose = ns.Bool("verbose")
 
-	if _, err := os.Stat(*args.videoDir); err != nil {
+	if _, err := os.Stat(args.videoDir); err != nil {
 		log.Fatal(err)
 	}
 
-	videoFiles := fileutils.GetFilesWithExtension(*args.videoDir, videoExtension)
-	if *args.verbose {
+	videoFiles := fileutils.GetFilesWithExtension(args.videoDir, videoExtension)
+	if args.verbose {
 		fmt.Printf("Found %v videos at %v\n", len(videoFiles), args.videoDir)
 	}
 
 	for _, videoFile := range videoFiles {
-		copySub(*args.videoDir, videoFile, *args.verbose)
+		copySub(args.videoDir, videoFile, args.verbose)
 	}
 }
