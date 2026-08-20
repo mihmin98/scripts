@@ -13,15 +13,16 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
 import sys
 import threading
-import queue
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypedDict
 
 try:
     from tqdm import tqdm
@@ -33,7 +34,17 @@ except ImportError:
 # Mode configuration
 # --------------------------------------------------------------------------- #
 
-MODE_CFG = {
+
+class ModeCfg(TypedDict):
+    command: str
+    unit: int
+    unit_name: str
+    default_units: int
+    codecs: list[str]
+    exts: list[str]
+
+
+MODE_CFG: dict[str, ModeCfg] = {
     "cd": {
         "command": "createcd",
         # A raw CD frame is 2352 bytes of sector data + 96 bytes of subcode.
@@ -217,11 +228,9 @@ def run_chdman(cmd: list[str], bar: tqdm | None, label: str) -> tuple[int, list[
     into a tqdm bar.  Returns (returncode, tail_of_output).
     """
     tail: list[str] = []
-    creationflags = 0
     kwargs: dict = {}
     if os.name == "nt":
-        creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        kwargs["creationflags"] = creationflags
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     else:
         kwargs["start_new_session"] = True
 
@@ -272,13 +281,13 @@ def run_chdman(cmd: list[str], bar: tqdm | None, label: str) -> tuple[int, list[
         try:
             proc.terminate()
             proc.wait(timeout=10)
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired):
             proc.kill()
         raise
     finally:
         try:
             proc.stderr.close()
-        except Exception:
+        except OSError:
             pass
 
 
@@ -375,6 +384,9 @@ def process_one(
     except Cancelled:
         if output.exists():
             output.unlink(missing_ok=True)
+        # Cancelling is not a failure; keep it out of the failed count and the
+        # non-zero exit status that would otherwise imply something broke.
+        res.skipped = True
         res.reason = "cancelled"
         return res
     finally:

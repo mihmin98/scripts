@@ -16,15 +16,16 @@ import argparse
 import csv
 import glob
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
 import sys
 import threading
-import queue
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypedDict
 
 try:
     from tqdm import tqdm
@@ -32,7 +33,15 @@ except ImportError:
     sys.exit("This script requires tqdm.  Install it with:  pip install tqdm")
 
 
-MODE_CFG = {
+
+class ModeCfg(TypedDict):
+    unit: int
+    unit_name: str
+    default_units: int
+    codecs: list[str]
+
+
+MODE_CFG: dict[str, ModeCfg] = {
     "cd": {
         "unit": 2448,
         "unit_name": "frames",
@@ -151,6 +160,7 @@ def probe(chdman: str, path: Path) -> ChdInfo:
             text=True,
             errors="replace",
             timeout=120,
+            check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         return info
@@ -169,9 +179,11 @@ def probe(chdman: str, path: Path) -> ChdInfo:
             if tag and tag.lower() not in ("none",):
                 info.codecs.append(tag)
 
-    if any(tag in info.raw for tag in CD_TAGS) or "cdrom" in info.raw.lower():
-        info.is_cd = True
-    elif any(c.startswith("cd") for c in info.codecs):
+    if (
+        any(tag in info.raw for tag in CD_TAGS)
+        or "cdrom" in info.raw.lower()
+        or any(c.startswith("cd") for c in info.codecs)
+    ):
         info.is_cd = True
     elif info.hunk_bytes and info.hunk_bytes % 2448 == 0 and info.hunk_bytes % 2048:
         # Divisible by the CD frame size but not the DVD sector size.
@@ -233,13 +245,13 @@ def run_chdman(cmd: list[str], bar: tqdm | None, label: str) -> tuple[int, list[
         try:
             proc.terminate()
             proc.wait(timeout=10)
-        except Exception:
+        except (OSError, subprocess.TimeoutExpired):
             proc.kill()
         raise
     finally:
         try:
             proc.stderr.close()
-        except Exception:
+        except OSError:
             pass
 
 
@@ -285,6 +297,12 @@ def process_one(
     res.old_codecs = info.codecs
 
     if args.mode == "auto":
+        if not info.raw.strip():
+            # 'chdman info' produced nothing (missing/corrupt file, timeout).
+            # Guessing "dvd" here would silently apply DVD codecs and a DVD hunk
+            # size to what may well be a CD image, so refuse instead.
+            res.reason = "could not read chdman info (use --mode cd/dvd to override)"
+            return res
         mode = "cd" if info.is_cd else "dvd"
     else:
         mode = args.mode
@@ -303,12 +321,16 @@ def process_one(
 
     outdir = Path(args.outdir) if args.outdir else path.parent
     replace = args.outdir is None and not args.no_replace
+    # Two inputs with the same stem living in different directories land on the
+    # same temp name once --outdir is in play, and parallel jobs would then
+    # scribble over each other, so make the temp name unique per run and slot.
+    tmp_name = f"{path.stem}.recomp.{os.getpid()}.{slot}.tmp.chd"
     if replace:
         final = path
-        tmp = path.with_name(path.stem + ".recomp.tmp.chd")
+        tmp = path.with_name(tmp_name)
     else:
         final = outdir / (path.stem + args.suffix + ".chd")
-        tmp = outdir / (path.stem + ".recomp.tmp.chd")
+        tmp = outdir / tmp_name
         if final.exists() and not args.force:
             res.skipped = True
             res.reason = "output exists (use --force)"
@@ -355,7 +377,9 @@ def process_one(
         gain = res.old_bytes - res.new_bytes
         gain_pct = (gain / res.old_bytes * 100) if res.old_bytes else 0.0
 
-        if gain_pct < args.min_gain and not args.keep_larger:
+        # With the default --min-gain of 0 a byte-for-byte identical result would
+        # still pass "gain_pct < 0", so require a real saving as well.
+        if (gain <= 0 or gain_pct < args.min_gain) and not args.keep_larger:
             tmp.unlink(missing_ok=True)
             res.ok = True
             res.reason = (
@@ -394,6 +418,7 @@ def process_one(
         return res
     except Cancelled:
         tmp.unlink(missing_ok=True)
+        res.skipped = True
         res.reason = "cancelled"
         return res
     finally:
@@ -494,6 +519,23 @@ def main(argv: list[str] | None = None) -> int:
         print("Nothing to do: no .chd files found.", file=sys.stderr)
         return 1
 
+    # When results go to a shared --outdir, two same-named inputs from different
+    # directories would both write to the same destination.
+    if args.outdir:
+        claimed: dict[Path, Path] = {}
+        unique: list[Path] = []
+        for f in files:
+            dest = (Path(args.outdir) / (f.stem + args.suffix + ".chd")).resolve()
+            if dest in claimed:
+                print(
+                    f"warning: skipping {f}, would collide with {claimed[dest]}",
+                    file=sys.stderr,
+                )
+                continue
+            claimed[dest] = f
+            unique.append(f)
+        files = unique
+
     print(f"chdman:  {chdman}")
     print(f"mode:    {args.mode}")
     if args.codec_list:
@@ -510,7 +552,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"jobs:    {args.jobs} x {args.cores} core(s)")
     print(f"files:   {len(files)}\n")
 
-    signal.signal(signal.SIGINT, lambda *_: _stop.set())
+    old_handler = signal.signal(signal.SIGINT, lambda *_: _stop.set())
 
     show_bars = not args.quiet and not args.dry_run and sys.stderr.isatty()
     nbars = args.jobs if show_bars else 0
@@ -576,6 +618,7 @@ def main(argv: list[str] | None = None) -> int:
                     break
     finally:
         overall.close()
+        signal.signal(signal.SIGINT, old_handler)
         for t in threads:
             t.join(timeout=5)
 
