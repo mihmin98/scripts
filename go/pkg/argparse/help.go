@@ -49,7 +49,7 @@ func (p *Parser) FormatHelp() string {
 	out.WriteString(p.FormatUsage())
 
 	if p.Description != "" {
-		out.WriteString("\n" + p.wrap(p.Description, "") + "\n")
+		out.WriteString("\n" + p.describe(p.Description) + "\n")
 	}
 	if len(p.positionals) > 0 {
 		out.WriteString("\npositional arguments:\n")
@@ -64,9 +64,19 @@ func (p *Parser) FormatHelp() string {
 		}
 	}
 	if p.Epilog != "" {
-		out.WriteString("\n" + p.wrap(p.Epilog, "") + "\n")
+		out.WriteString("\n" + p.describe(p.Epilog) + "\n")
 	}
 	return out.String()
+}
+
+// describe renders the description or epilog: re-wrapped to the terminal
+// width by default, or emitted verbatim when RawText is set, which is what
+// Python's RawDescriptionHelpFormatter does.
+func (p *Parser) describe(text string) string {
+	if p.RawText {
+		return strings.TrimRight(text, "\n")
+	}
+	return p.wrap(text, "")
 }
 
 // PrintHelp writes the help text to stdout.

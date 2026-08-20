@@ -32,6 +32,11 @@ type Parser struct {
 	Description string
 	Epilog      string
 
+	// RawText keeps Description and Epilog exactly as written instead of
+	// re-wrapping them, the equivalent of Python's
+	// formatter_class=RawDescriptionHelpFormatter.
+	RawText bool
+
 	// ExitOnHelp controls whether the automatic -h/--help exits the process
 	// (the Python behaviour, and the default). Tests set it to false.
 	ExitOnHelp bool
